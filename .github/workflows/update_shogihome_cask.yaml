@@ -1,0 +1,71 @@
+# ワークフロー名
+name: Update ShogiHome Cask
+
+on:
+  workflow_dispatch: # 手動実行
+  schedule: #  スケジュール実行（毎日 AM 8:00 UTC / 日本時間 PM 5:00）
+    - cron: "0 8 * * *"
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    # リポジトリに書き込むために必要な権限
+    permissions:
+      contents: write
+
+    steps:
+      # ステップ1: リポジトリのコードをチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ステップ2: ShogiHomeの最新リリースバージョンを取得
+      - name: Get latest ShogiHome release version
+        id: get_latest_version
+        run: |
+          LATEST_VERSION=$(curl -sL https://api.github.com/repos/sunfish-shogi/shogihome/releases/latest | jq -r ".tag_name" | sed 's/^v//')
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "::error::Failed to fetch the latest version from GitHub API."
+            exit 1
+          fi
+          echo "latest_version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest ShogiHome version found: ${LATEST_VERSION}"
+
+      # ステップ3: 現在のCaskファイルに記載されているバージョンを取得
+      - name: Get current Cask version
+        id: get_current_version
+        run: |
+          # --- cask用のファイルのパス ---
+          CASK_FILE_PATH="Casks/shogihome.rb"
+          # ----------------------------------------------------
+
+          if [ ! -f "$CASK_FILE_PATH" ]; then
+            echo "::error::Cask file not found at: $CASK_FILE_PATH"
+            exit 1
+          fi
+          CURRENT_VERSION=$(grep -m 1 'version "' "$CASK_FILE_PATH" | sed -E 's/.*version "([^"]+)".*/\1/')
+          echo "current_version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+          echo "cask_file_path=${CASK_FILE_PATH}" >> $GITHUB_OUTPUT
+          echo "Current Cask version: ${CURRENT_VERSION}"
+
+      # ステップ4: バージョンを比較し、新しければCaskファイルを更新
+      - name: Update Cask file if new version is available
+        if: steps.get_latest_version.outputs.latest_version != steps.get_current_version.outputs.current_version
+        run: |
+          echo "New version found. Updating from ${{ steps.get_current_version.outputs.current_version }} to ${{ steps.get_latest_version.outputs.latest_version }}."
+          CASK_FILE="${{ steps.get_current_version.outputs.cask_file_path }}"
+          CURRENT_VERSION="${{ steps.get_current_version.outputs.current_version }}"
+          LATEST_VERSION="${{ steps.get_latest_version.outputs.latest_version }}"
+          sed -i "s/version \"${CURRENT_VERSION}\"/version \"${LATEST_VERSION}\"/" "$CASK_FILE"
+          sed -i "s|/v${CURRENT_VERSION}/release-v${CURRENT_VERSION}-mac.zip|/v${LATEST_VERSION}/release-v${LATEST_VERSION}-mac.zip|" "$CASK_FILE"
+          sed -i "s/ShogiHome-${CURRENT_VERSION}-universal.dmg/ShogiHome-${LATEST_VERSION}-universal.dmg/" "$CASK_FILE"
+          echo "Cask file was updated successfully."
+
+      # ステップ5: 変更をコミットして直接プッシュする
+      - name: Commit and push changes
+        if: steps.get_latest_version.outputs.latest_version != steps.get_current_version.outputs.current_version
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add ${{ steps.get_current_version.outputs.cask_file_path }}
+          git commit -m "feat: Update shogi-home cask to v${{ steps.get_latest_version.outputs.latest_version }}"
+          git push
