@@ -1,11 +1,11 @@
 cask "shogihome" do
   homepage "https://github.com/sunfish-shogi/shogihome"
   name "ShogiHome"
-  version "1.24.3"
+  version "null"
   sha256 :no_check
-  url "https://github.com/sunfish-shogi/shogihome/releases/download/v1.24.3/release-v1.24.3-mac.zip"
+  url "https://github.com/sunfish-shogi/shogihome/releases/download/vnull/release-vnull-mac.zip"
 
-  container nested: "ShogiHome-1.24.3-universal.dmg"
+  container nested: "ShogiHome-null-universal.dmg"
 
   app "ShogiHome.app"
 
